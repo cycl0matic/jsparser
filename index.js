@@ -17,7 +17,48 @@ const updateParserError = (state, errorMsg) => ({
   error: errorMsg,
 });
 
-const str = (parserState) => {
+class Parser {
+  constructor(parserStateTransformerFn) {
+    this.parserStateTransformerFn = parserStateTransformerFn;
+  }
+
+  run(targetString) {
+    const initialState = {
+      targetString,
+      index: 0,
+      result: null,
+      isError: false,
+      error: null,
+    };
+    return this.parserStateTransformerFn(initialState);
+  }
+
+  map(fn){
+    return new Parser(parserState => {
+      const nextState = this.parserStateTransformerFn(parserState);
+
+      if(nextState.isError){
+        return nextState;
+      }
+
+      return updateParserResult(nextState, fn(nextState.result));
+    })
+  }
+
+  errormap(fn){
+    return new Parser(parserState => {
+      const nextState = this.parserStateTransformerFn(parserState);
+
+      if(!nextState.isError){
+        return nextState;
+      }
+
+      return updateParserResult(nextState, fn(nextState.error, nextState.index));
+    })
+  }
+}
+
+const str = new Parser((parserState) => {
   const { targetString, index, isError } = parserState;
 
   if (isError) {
@@ -41,9 +82,9 @@ const str = (parserState) => {
     parserState,
     `str : Tried to match ${s} but got ${targetString.slice(index, index + 10)}`
   );
-};
+});
 
-const sequenceOf = (parsers) => (parserState) => {
+const sequenceOf = (parsers) => new Parser((parserState) => {
   if (parserState.isError) {
     return parserState;
   }
@@ -52,7 +93,7 @@ const sequenceOf = (parsers) => (parserState) => {
   let nextState = parserState;
 
   for (let p of parsers) {
-    nextState = p(nextState);
+    nextState = p.parserStateTransformerFn(nextState);
     results.push(nextState.result);
   }
 
@@ -66,15 +107,15 @@ const run = (parser, targetString) => {
     targetString,
     index: 0,
     result: null,
+    isError: false,
+    error: null,
   };
   return parser(initialState);
-};
+})
 
 // Test
 
-const parser = sequenceOf([
-  str("hello from the other side"),
-  str("Goodbye From the other side"),
-]);
+const parser = str("hello from the other side").map(result => result.toUpperCase());
 
-console.log(run(parser, "this is not correct"));
+
+
